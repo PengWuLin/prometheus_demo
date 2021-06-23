@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"math/rand"
+	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -10,25 +11,35 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-var cpuPercent = prometheus.NewGauge(
-	prometheus.GaugeOpts{
-		Name: "cpu_percent",
-		Help: "cpu使用率",
-	},
-)
+var (
+	loginCount = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "login_count",
+			Help: "cpu使用率",
+		},
+		[]string{"client_ip"},
+	)
 
-var memUsedPercent = prometheus.NewGauge(
-	prometheus.GaugeOpts{
-		Name: "mem_used_percent",
-		Help: "内存使用率",
-	},
+	cpuPercent = prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "cpu_percent",
+			Help: "cpu使用率",
+		},
+	)
+
+	memUsedPercent = prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "mem_used_percent",
+			Help: "内存使用率",
+		},
+	)
 )
 
 func init() {
-	prometheus.MustRegister(cpuPercent)
+	prometheus.MustRegister(loginCount, cpuPercent, memUsedPercent)
 }
 
-var address = flag.String("address", "0.0.0.0:10001", "服务器监听地址")
+var address = flag.String("address", "0.0.0.0:10000", "服务器监听地址")
 
 func main() {
 
@@ -40,6 +51,16 @@ func main() {
 	engine.GET("/metrics", func(c *gin.Context) {
 		promhttp.Handler().ServeHTTP(c.Writer, c.Request)
 		return
+	})
+
+	// 匹配路由 login?firstname=wulin&lastname=peng
+	engine.GET("/login", func(c *gin.Context) {
+		ip := c.ClientIP()
+		loginCount.WithLabelValues(ip).Inc()
+
+		firstname := c.DefaultQuery("firstname", "Guest")
+		lastname := c.Query("lastname")
+		c.String(http.StatusOK, "Hello %s %s", firstname, lastname)
 	})
 
 	err := engine.Run(*address)
